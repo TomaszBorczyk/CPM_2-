@@ -1,6 +1,3 @@
-// CPM.cpp : Defines the entry point for the console application.
-//
-
 #include "stdafx.h"
 #include <iostream>
 #include <fstream>
@@ -8,16 +5,14 @@
 #include <queue>
 #include <utility>
 #include <vector>
-#include <algorithm>
 
 
-
-//std::pair<int, int> takePair
 class Node {
 
 private:
-	int id;
 	int procTime;
+	int id;
+
 	int earlyStart;
 	int earlyFinish;
 	int lateStart;
@@ -25,26 +20,33 @@ private:
 	int indegree;
 	int outdegree;
 
+	int indegreeTopoSort;
 
 public:
 	Node() {
 	}
 
 	Node(int procTime, int id) {
-		this->id = id;
 		this->procTime = procTime;
-		indegree = 0;
-		outdegree = 0;
+		this->id = id;
+		indegree = indegreeTopoSort = 0; //iloœæ po³¹czeñ wchodz¹cych i TopoSort, czyli to samo na potrzeby sortowania topologicznego
+		outdegree = 0;   //iloœæ po³¹czeñ wychodz¹cych
 		earlyStart = 0;
 		lateFinish = 9999;
 		lateStart = 9999;
 	}
 
-	
+	void increaseIndegree() { indegree++; indegreeTopoSort++; }
 
-	void increaseIndegree() { indegree++; }
+	void decreaseIndTopoSort() { indegreeTopoSort--; }
+
+	void decreaseIndegree() { indegree--; }
 
 	void increaseOutdegree() { outdegree++; }
+
+
+
+	void setId(int id) { this->id = id; }
 
 	void setES(int es) { this->earlyStart = es; }
 
@@ -53,6 +55,10 @@ public:
 	void setLS(int ls) { lateStart = ls; }
 
 	void setLF(int lf) { lateFinish = lf; }
+
+	void setIndegree(int _indegree) { indegree = _indegree; }
+
+	void setOutdegree(int _outdegree) { outdegree = _outdegree; }
 
 	int getES() { return earlyStart; }
 
@@ -63,46 +69,52 @@ public:
 	int getLF() { return lateFinish; }
 
 	int getIndegree() { return indegree; }
+	int getIndegreeTopoSort() { return indegreeTopoSort; }
 
 	int getOutdegree() { return outdegree; }
 
 	int getProcTime() { return procTime; }
 
+	int getId() { return id; }
+
 	void setESEFBasedOnPredecessor(Node* node) {
 		this->setES(std::max(this->getES(), node->getEF()));
 		this->setEF(this->getES() + this->getProcTime());
-
 	}
 
 	void setLSLFBasedOnSuccessor(Node* node) {
 		this->setLF(std::min(this->getLF(), node->getLS()));
 		this->setLS(this->getLF() - this->getProcTime());
+
 	}
 };
 
 class Graph {
 	int nNodes, nEdges;
-	std::vector <std::pair<int, int >> edges;
-	Node finish;
+	std::vector<Node> nodes;
+	int* idToIndex;	//tablica translacji id -> indeks w celu znalezienia wierzcho³ka po sortowaniu topologicznym
+	std::vector<std::vector<int>> edges;
+	Node finish; //sztuczny wierzcho³ek koñcowy, który przechowuje informacje o d³ugoœci harmonogramu i LS/LF dla koñcu grafu
 
 public:
-	std::vector<Node> nodes;
 
-
-	void setnNodes(int n) {
-		nNodes = n;
+	Graph(int _nodes, int _edges) {
+		nNodes = _nodes;
+		nEdges = _edges;
+		edges.resize(nEdges);
+		idToIndex = new int[nNodes];
 	}
 
-	void setnEdges(int n) {
-		nEdges = n;
-	}
+	void setnNodes(int n) { nNodes = n; }
+	void setnEdges(int n) { nEdges = n; }
+
 
 	void readNodes(std::ifstream& file) {
 		int nodeTime;
 		for (int i = 0; i < nNodes; i++) {
 			file >> nodeTime;
-			Node node(nodeTime, i+1);
-			//if (!i) { node.setES(0); node.setEF(nodeTime); }
+			Node node(nodeTime, i + 1);
+			idToIndex[i] = i;
 			nodes.push_back(node);
 		}
 	}
@@ -112,23 +124,17 @@ public:
 		int a, b;
 		for (int i = 0; i < nEdges; i++) {
 			file >> a >> b;
-			edges.push_back(std::make_pair(a, b));
+
+			nodes[idToIndex[a - 1]].increaseOutdegree();
+			nodes[idToIndex[b - 1]].increaseIndegree();
+			edges[a - 1].push_back(b - 1);
 		}
 	}
 
-
-	void setIndegreeAndOutdegree() {
-		for (int i = 0; i < nNodes; i++) {
-			for (std::pair<int, int> e : edges) {
-				if (e.second == i + 1) {
-					nodes.at(i).increaseIndegree();
-				}
-				else if (e.first == i + 1) {
-					nodes.at(i).increaseOutdegree();
-				}
-			}
-		}
+	void setIdToIndex(int id, int index) {
+		idToIndex[id] = index;
 	}
+
 
 	void setFinish() {
 		for (Node e : nodes) {
@@ -142,7 +148,7 @@ public:
 	}
 
 
-	void setESEF_for_starters() {
+	void setESEF_for_starters() { //ustawienie ES/EF dla wierzcho³ków pocz¹tkowych
 		for (std::vector<Node>::iterator it = nodes.begin(); it != nodes.end(); it++) {
 			if ((*it).getIndegree() == 0) {
 				int a = (*it).getProcTime();
@@ -151,7 +157,7 @@ public:
 		}
 	}
 
-	void setLSLF_for_enders() {
+	void setLSLF_for_enders() { //ustawienie LF/LF dla wierzcho³ków koñcowych, po przejœciu ca³ego grafu
 		for (std::vector<Node>::iterator it = nodes.begin(); it != nodes.end(); it++) {
 			if ((*it).getOutdegree() == 0) {
 				(*it).setLSLFBasedOnSuccessor(&finish);
@@ -159,97 +165,114 @@ public:
 		}
 	}
 
-	void setESFF_for_graph() {
-		for (std::pair<int, int> e : edges) {
-			nodes.at(e.second - 1).setESEFBasedOnPredecessor(&nodes.at(e.first - 1));
+	void setESEF_for_graph() { // ustawienie ES/EF dla reszty grafu, po ustawieniu ES/EF dla wierzcho³ków pocz¹tkowych
+		std::vector<std::vector<int>>::iterator it = edges.begin();
+		for (; it != edges.end(); it++) {
+			std::vector<int>::iterator jt = (*it).begin();
+			for (; jt != (*it).end(); jt++) {
+				nodes.at((idToIndex[*jt])).setESEFBasedOnPredecessor(&nodes.at(idToIndex[it - edges.begin()]));
+			}
 		}
 	}
 
 
-	void setLSLF_for_graph() {
-		for (int i = edges.size() - 1; i >= 0; i--) {
-			nodes.at(edges.at(i).first - 1).setLSLFBasedOnSuccessor(&nodes.at(edges.at(i).second - 1));
+	void setLSLF_for_graph() {// ustawienie LS/LF dla reszty grafu, po ustawieniu LS/LF dla wierzcho³ków koñcowych
+		for (unsigned i = edges.size(); i-- > 0; ) {
+			for (unsigned j = edges[i].size(); j-- > 0; ) {
+				nodes[idToIndex[i]].setLSLFBasedOnSuccessor(&nodes[idToIndex[edges.at(i).at(j)]]);
+			}
 		}
 	}
 
-	std::queue<Node> returnZeroIndegree() {
-		std::queue<Node> zeros;
-
-		for (Node e : nodes) {
-			if (e.getIndegree())
-				zeros.push(e);
+	void displayEdges() {
+		for (int i = 0; i < edges.size(); i++) {
+			std::cout << "id: " << i + 1 << "   ";
+			for (auto e : edges[i]) {
+				std::cout << e + 1 << ", ";
+			}
+			std::cout << "\n";
 		}
-		return zeros;
-		
 	}
 
 	void displayNodes() {
 		for (Node e : nodes) {
-			std::cout << e.getES() << " " << e.getEF() << " " << e.getLS() << " " << e.getLF() <<" " << e.getIndegree()<< std::endl;
+			std::cout << e.getES() << " " << e.getEF() << " " << e.getLS() << " " << e.getLF() << " id: " << e.getId() << " indegree: " << e.getIndegree() << " out: " << e.getOutdegree() << std::endl;
 		}
 		std::cout << finish.getES();
 	}
-};
 
+	void topologicalSort() { 	//na podstawie wikipedii
+		std::deque<Node> Q;
+		std::vector<Node> result;
+		Node tempNode;
+		int nodeId;
+		for (auto node : nodes) {
+			if (node.getIndegree() == 0) {
+				Q.push_back(node);
+			}
+		}
 
-std::vector<Node> sortGraph(Graph& graph) {
-	//std::queue<Node> Q;
-	std::sort(graph.nodes.begin(), graph.nodes.end(), ([](Node arg1, Node arg2)->bool {return arg1.getIndegree() < arg2.getIndegree(); }));
-	return graph.nodes;
-}
+		while (!Q.empty()) {
+			tempNode = Q.front();
+			result.push_back(tempNode);
+			setIdToIndex(tempNode.getId() - 1, result.size() - 1);
+			Q.pop_front();
 
-void calcTotalETime(int nNodes, std::vector<Node> nodes) {
-	for (Node e : nodes) {
-
+			for (auto e : edges[tempNode.getId() - 1]) {
+				Node& currNode = nodes[idToIndex[e]];
+				currNode.decreaseIndTopoSort();
+				if (currNode.getIndegreeTopoSort() == 0) {
+					Q.push_front(currNode);
+				}
+			}
+		}
+		nodes = result;
 	}
-}
 
+
+	void sortById() {
+		std::sort(nodes.begin(), nodes.end(), [](Node n1, Node n2) {
+			return n1.getId() < n2.getId();
+		});
+	}
+
+};
 
 
 int main()
 {
-	Graph graph;
 	int nNodes, nEdges;
 	FILE *ofile;
+	char decision;
 
 	std::string fileName;
 
-	/*std::cout << "Enter filename\n";
-	std::cin >> fileName;*/
-
-	std::ifstream file("dataSort10.txt");
+	std::ifstream file("data20.txt");
+	std::cout << "Posortowaæ topologicznie? y/n ";
+	std::cin >> decision;
 
 	file >> nNodes >> nEdges;
-	
-	//graph.setnNodes(nNodes);
-	//graph.setnEdges(nEdges);
 
-	//graph.readNodes(file);
-	//graph.readEdges(file);
-	//graph.setIndegreeAndOutdegree();
-	//graph.setESEF_for_starters();
-
-	//graph.setESFF_for_graph();
-	//graph.setFinish();
-	//graph.setLSLF_for_enders();
-	//graph.setLSLF_for_graph();
-	//graph.displayNodes();
-
-
-	graph.setnNodes(nNodes);
-	graph.setnEdges(nEdges);
+	Graph graph(nNodes, nEdges);
 
 	graph.readNodes(file);
 	graph.readEdges(file);
-	graph.setIndegreeAndOutdegree();
 
-	sortGraph(graph);
+	if (decision == 'y')
+		graph.topologicalSort();
+
+	graph.setESEF_for_starters();
+	graph.setESEF_for_graph();
+
+	graph.setFinish();
+	graph.setLSLF_for_enders();
+	graph.setLSLF_for_graph();
+
+	graph.sortById();
 	graph.displayNodes();
 
-
-
-	std::cin >> fileName;
+	std::cin.ignore();
+	std::cin.ignore();
 
 	return 0;
 }
-
