@@ -15,7 +15,7 @@ int main()
 	std::string fileName;
 
 	std::ifstream file("data20.txt");
-	std::cout << "Posortowaæ topologicznie? y/n ";
+	std::cout << "Posortowa� topologicznie? y/n ";
 	std::cin >> decision;
 
 	file >> nNodes >> nEdges;

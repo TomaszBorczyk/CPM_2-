@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <functional>
+#include <algorithm>
 
 #include "Graph.hpp"
 
